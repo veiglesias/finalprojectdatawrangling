@@ -1,0 +1,455 @@
+---
+title: "Demonstrating Quarto for GitHub READMEs"
+format: gfm
+execute: 
+  warning: false
+  message: false
+  errors: false
+jupyter: python3
+---
+
+```{python}
+# First 10 rows, info, and data types for nat_cor
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import statsmodels.formula.api as smf
+import plotly.graph_objects as go
+
+nat_cor = pd.read_csv("nationalism_corruption.csv")
+v_dem = pd.read_csv(("V-Dem-CY-Full.csv"), low_memory=False) # to ensure proper data 
+
+nat_cor.head(10)
+nat_cor.info()
+nat_cor.dtypes
+
+# Summary statistics
+nat_cor.describe()
+
+# Check for missing values and duplicates
+nat_cor.isnull().sum()
+nat_cor.duplicated().sum()
+
+# The data covers a lot of years so I will cut down to the most recent decade for both datasets
+filtered_nat_cor = nat_cor[(nat_cor['year'] >= 2012) & (nat_cor['year'] <= 2022)]
+filtered_nat_cor
+
+# There's only 30 columns but I will filter which columns/variables I will keep for the analysis
+col_f_nat_cor = [
+    'country', 'year', 'top_ideology', 'v2exl_legitideol', 'wdi_population'
+] #columns of interest from this dataset:
+# top_ideology: Top ideology in the country
+# v2exl_legitideol: Legitimacy of the electoral process
+# wdi_population: Population (World Bank)
+
+new_nat_cor = filtered_nat_cor[col_f_nat_cor].copy()
+new_nat_cor # filtered dataset with columns of interest
+```
+
+```{python}
+# First 10 rows, info, and data types for v_dem
+v_dem.head(10)
+v_dem.info()
+v_dem.dtypes
+
+# Summary statistics
+v_dem.describe()
+
+# Check for missing values and duplicates
+v_dem.isnull().sum()
+v_dem.duplicated().sum()
+
+# The data covers a lot of years so I will also cut down to the most recent decade for both datasets
+filtered_v_dem = v_dem[(v_dem['year'] >= 2012) & (v_dem['year'] <= 2022)].copy()
+
+# Considering there's over 4,000 columns (4607!), I will filter which columns/variables I will keep for the analysis
+col_f_v_dem = [
+    'country_name', 'year', 'v2x_polyarchy', 'v2mecenefm', 'v2x_corr', 'e_wbgi_gee', 'e_wbgi_vae', 'v2x_cspart'
+] #columns of interest from this dataset:
+# v2x_polyarchy = Electoral Democracy Index (0-1 scale)
+# v2mecenefm = Mean Electoral Competitiveness Index (0-1 scale)
+# v2x_corr = Corruption Index (0-1 scale)
+# e_wbgi_gee = World Bank Governance Indicator - Government Effectiveness (-2.5 to 2.5 scale)
+# e_wbgi_vae = World Bank Governance Indicator - Voice and Accountability (-2.5 to 2.5 scale)
+# v2x_cspart = Civil Society Participation Index (0-1 scale)
+
+new_v_dem = filtered_v_dem[col_f_v_dem].copy()
+new_v_dem = new_v_dem.rename(columns={'country_name': 'country'})
+
+new_v_dem # filtered and renamed dataset with columns of interest
+```
+
+```{python}
+combined = pd.merge(new_nat_cor, new_v_dem, left_on=['country', 'year'], right_on=['country', 'year'], how='inner')
+combined # merged dataset
+```
+
+```{python}
+# Creating a regional classification for countries
+sub_region_class = pd.Series(index=combined.index, dtype=str)
+
+# North America
+sub_region_class.loc[combined['country'].isin(['United States of America', 'Mexico', 'Canada'])] = 'North America'
+# Central America
+sub_region_class.loc[combined['country'].isin(['El Salvador', 'Guatemala', 'Honduras', 'Belize', 'Nicaragua', 'Costa Rica', 'Panama'])] = 'Central America'
+# South America
+sub_region_class.loc[combined['country'].isin(['Brazil', 'Argentina', 'Chile', 'Ecuador', 'Bolivia', 'Guyana', 'Paraguay', 'Colombia', 'Peru', 'Venezuela', 'Suriname', 'Uruguay'])] = 'South America'
+# Caribbean
+sub_region_class.loc[combined['country'].isin(['Antigua and Barbuda', 'Bahamas', 'Barbados', 'Cuba', 'Dominica', 'Dominican Republic', 'Grenada', 'Haiti', 'Jamaica', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Trinidad and Tobago'])] = 'Caribbean'
+# North Europe
+sub_region_class.loc[combined['country'].isin(['Norway', 'Sweden', 'Denmark', 'Finland', 'Iceland', 'Estonia', 'Latvia', 'Lithuania', 'Ireland', 'United Kingdom'])] = 'North Europe'
+# West Europe
+sub_region_class.loc[combined['country'].isin(['Belgium', 'France', 'Luxembourg', 'Netherlands'])] = 'West Europe'
+# Central Europe
+sub_region_class.loc[combined['country'].isin(['Austria', 'Czechia', 'Germany', 'Hungary', 'Liechtenstein', 'Slovakia', 'Poland', 'Slovenia', 'Switzerland'])] = 'Central Europe'
+# East Europe
+sub_region_class.loc[combined['country'].isin(['Russia', 'Romania', 'Bulgaria', 'Ukraine', 'Belarus', 'Moldova', 'Georgia'])] = 'East Europe'
+# South Europe
+sub_region_class.loc[combined['country'].isin(['Spain', 'Portugal', 'Albania', 'Andorra', 'Bosnia and Herzegovina', 'Crotia', 'Cyprus', 'Greece', 'Italy', 'Kosovo', 'Malta', 'Montenegro', 'North Macedonia', 'San Marino', 'Serbia', 'Vatican City', 'Croatia'])] = 'South Europe'
+# Middle East
+sub_region_class.loc[combined['country'].isin(['Bahrain', 'Iran', 'Iraq', 'Israel', 'Jordan', 'Kuwait', 'Lebanon', 'Oman', 'Qatar', 'Saudi Arabia', 'Syria', 'Turkey', 'United Arab Emirates', 'Yemen', 'Armenia', 'Azerbaijan'])] = 'Middle East'
+# East Asia
+sub_region_class.loc[combined['country'].isin(['China', 'Japan', 'North Korea', 'South Korea', 'Taiwan', 'Mongolia', 'Hong Kong'])] = 'East Asia'
+# South Asia
+sub_region_class.loc[combined['country'].isin(['Afghanistan', 'Bangladesh', 'Bhutan', 'India', 'Maldives', 'Nepal', 'Pakistan', 'Sri Lanka'])] = 'South Asia'
+# Central Asia
+sub_region_class.loc[combined['country'].isin(['Kazakhstan', 'Kyrgyzstan', 'Tajikistan', 'Turkmenistan', 'Uzbekistan'])] = 'Central Asia'
+# Southeast Asia
+sub_region_class.loc[combined['country'].isin(['Brunei', 'Cambodia', 'Indonesia', 'Laos', 'Malaysia', 'Burma/Myanmar', 'Philippines', 'Singapore', 'Thailand', 'Timor-Leste', 'Vietnam'])] = 'Southeast Asia'
+# North Africa
+sub_region_class.loc[combined['country'].isin(['Algeria', 'Egypt', 'Libya', 'Morocco', 'Sudan', 'Tunisia'])] = 'North Africa'
+# West Africa
+sub_region_class.loc[combined['country'].isin(['Benin', 'Burkina Faso', 'Cape Verde', 'Ivory Coast', 'Gambia', 'Ghana', 'Guinea', 'Guinea-Bissau', 'Liberia', 'Mali', 'Mauritania', 'Niger', 'Nigeria', 'Senegal', 'Sierra Leone', 'Togo', 'The Gambia'])] = 'West Africa'
+# Central Africa
+sub_region_class.loc[combined['country'].isin(['Cameroon', 'Central African Republic', 'Chad', 'Republic of the Congo', 'Democratic Republic of the Congo', 'Equatorial Guinea', 'Gabon', 'Sao Tome and Principe'])] = 'Central Africa'
+# East Africa
+sub_region_class.loc[combined['country'].isin(['Burundi', 'Comoros', 'Djibouti', 'Eritrea', 'Ethiopia', 'Kenya', 'Madagascar', 'Mauritius', 'Rwanda', 'Seychelles', 'Somalia', 'South Sudan', 'Tanzania', 'Uganda'])] = 'East Africa'
+# Southern Africa
+sub_region_class.loc[combined['country'].isin(['Angola', 'Botswana', 'Eswatini', 'Lesotho', 'Malawi', 'Mozambique', 'Namibia', 'South Africa', 'Zambia', 'Zimbabwe'])] = 'Southern Africa'
+# Oceania
+sub_region_class.loc[combined['country'].isin(['Australia', 'New Zealand', 'Fiji', 'Kiribati', 'Marshall Islands', 'Micronesia', 'Nauru', 'Palau', 'Papua New Guinea', 'Samoa', 'Solomon Islands', 'Tonga', 'Tuvalu', 'Vanuatu'])] = 'Oceania'
+
+combined['sub_region_class'] = sub_region_class
+display(combined.tail(150))
+
+combined['sub_region_class'].isnull().sum() # verifying every country in the data has a sub-region assigned
+sub_region_class.unique() # sub-region classification check
+```
+
+```{python}
+# Creating a regional classification for countries
+region_class = pd.Series(index=combined.index, dtype=str)
+
+# America
+region_class.loc[combined['country'].isin(['United States of America', 'Mexico', 'Canada', 'El Salvador', 'Guatemala', 'Honduras', 'Belize', 'Nicaragua', 'Costa Rica', 'Panama', 'Brazil', 'Argentina', 'Chile', 'Ecuador', 'Bolivia', 'Guyana', 'Paraguay', 'Colombia', 'Peru', 'Venezuela', 'Suriname', 'Uruguay', 'Antigua and Barbuda', 'Bahamas', 'Barbados', 'Cuba', 'Dominica', 'Dominican Republic', 'Grenada', 'Haiti', 'Jamaica', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Trinidad and Tobago'])] = 'America'
+
+# Europe
+region_class.loc[combined['country'].isin(['Norway', 'Sweden', 'Denmark', 'Finland', 'Iceland', 'Estonia', 'Latvia', 'Lithuania', 'Ireland', 'United Kingdom', 'Belgium', 'France', 'Luxembourg', 'Netherlands', 'Austria', 'Czechia', 'Germany', 'Hungary', 'Liechtenstein', 'Slovakia', 'Poland', 'Slovenia', 'Switzerland', 'Russia', 'Romania', 'Bulgaria', 'Ukraine', 'Belarus', 'Moldova', 'Georgia', 'Spain', 'Portugal', 'Albania', 'Andorra', 'Bosnia and Herzegovina', 'Crotia', 'Cyprus', 'Greece', 'Italy', 'Kosovo', 'Malta', 'Montenegro', 'North Macedonia', 'San Marino', 'Serbia', 'Vatican City', 'Croatia'])] = 'Europe'
+
+# Middle East
+region_class.loc[combined['country'].isin(['Bahrain', 'Iran', 'Iraq', 'Israel', 'Jordan', 'Kuwait', 'Lebanon', 'Oman', 'Qatar', 'Saudi Arabia', 'Syria', 'Turkey', 'United Arab Emirates', 'Yemen', 'Armenia', 'Azerbaijan'])] = 'Middle East'
+
+# Asia
+region_class.loc[combined['country'].isin(['China', 'Japan', 'North Korea', 'South Korea', 'Taiwan', 'Mongolia', 'Hong Kong', 'Afghanistan', 'Bangladesh', 'Bhutan', 'India', 'Maldives', 'Nepal', 'Pakistan', 'Sri Lanka', 'Kazakhstan', 'Kyrgyzstan', 'Tajikistan', 'Turkmenistan', 'Uzbekistan', 'Brunei', 'Cambodia', 'Indonesia', 'Laos', 'Malaysia', 'Burma/Myanmar', 'Philippines', 'Singapore', 'Thailand', 'Timor-Leste', 'Vietnam'])] = 'Asia'
+
+# Africa
+region_class.loc[combined['country'].isin(['Algeria', 'Egypt', 'Libya', 'Morocco', 'Sudan', 'Tunisia', 'Benin', 'Burkina Faso', 'Cape Verde', 'Ivory Coast', 'Gambia', 'Ghana', 'Guinea', 'Guinea-Bissau', 'Liberia', 'Mali', 'Mauritania', 'Niger', 'Nigeria', 'Senegal', 'Sierra Leone', 'Togo', 'The Gambia', 'Cameroon', 'Central African Republic', 'Chad', 'Republic of the Congo', 'Democratic Republic of the Congo', 'Equatorial Guinea', 'Gabon', 'Sao Tome and Principe', 'Burundi', 'Comoros', 'Djibouti', 'Eritrea', 'Ethiopia', 'Kenya', 'Madagascar', 'Mauritius', 'Rwanda', 'Seychelles', 'Somalia', 'South Sudan', 'Tanzania', 'Uganda', 'Angola', 'Botswana', 'Eswatini', 'Lesotho', 'Malawi', 'Mozambique', 'Namibia', 'South Africa', 'Zambia', 'Zimbabwe'])] = 'Africa'
+
+# Oceania
+region_class.loc[combined['country'].isin(['Australia', 'New Zealand', 'Fiji', 'Kiribati', 'Marshall Islands', 'Micronesia', 'Nauru', 'Palau', 'Papua New Guinea', 'Samoa', 'Solomon Islands', 'Tonga', 'Tuvalu', 'Vanuatu'])] = 'Oceania'
+
+combined['region_class'] = region_class
+display(combined.tail(150))
+
+combined['region_class'].isnull().sum() # verifying every country in the data has a region assigned
+region_class.unique() # region classification check
+```
+
+```{python}
+# Because the corruption data is only available from 2012 onwards, I will focus on the extracting a good analysis from the years 2012 to 2022. This will ensure that the analysis is based on complete data for all variables of interest. It's worth noting that this may result in a smaller dataset but as long as I recognize the limitation of the data and timeframe and choose the variables for analysis carefully, I can still derive meaningful insights.
+
+# Calculate the change for each country across the entire time period (2012-2022), using the last and first year values in a new DataFrame
+# Using .apply() because I need to calculate multiple aggregated values per group (polyarchy, wbgi_gee, v2x_corr)
+country_performance = combined.groupby('country', as_index=False).apply(lambda x: pd.Series({
+    'polyarchy_change': x['v2x_polyarchy'].iloc[-1] - x['v2x_polyarchy'].iloc[0],
+    'e_wbgi_gee_change': (x['e_wbgi_gee'].iloc[-1] - x['e_wbgi_gee'].iloc[0]) / x['e_wbgi_gee'].iloc[0] if (x['e_wbgi_gee'].iloc[0] != 0 and not pd.isna(x['e_wbgi_gee'].iloc[0])) else np.nan,
+    'v2x_corr_change': (x['v2x_corr'].iloc[-1] - x['v2x_corr'].iloc[0]) / x['v2x_corr'].iloc[0] if (x['v2x_corr'].iloc[0] != 0 and not pd.isna(x['v2x_corr'].iloc[0])) else np.nan,
+    'v2x_polyarchy_last_year': x['v2x_polyarchy'].iloc[-1] # Keep the last year's polyarchy score for context
+}), include_groups=False)
+
+# 'country' as the index for country_performance
+country_performance = country_performance.set_index('country')
+
+change_variables = {
+    'polyarchy_change': 'Electoral Democracy (Polyarchy) Index',
+    'e_wbgi_gee_change': 'Government Effectiveness Index',
+    'v2x_corr_change': 'Corruption Index'
+}
+
+for variable, title in change_variables.items():
+    print(f"\n--- Top 10 Improvers based on {title} ---")
+    top_improvers = country_performance.sort_values(by=variable, ascending=False).head(10)
+    print(top_improvers[[variable]])
+
+    print(f"\n--- Top 10 Decliners based on {title} ---")
+    worst_decliners = country_performance.sort_values(by=variable, ascending=True).head(10)
+    print(worst_decliners[[variable]])
+```
+
+```{python}
+# 1. How does the level of corruption vary across world regions?
+plt.figure(figsize=(14, 8))
+sns.boxplot(x='region_class', y='v2x_corr', data=combined, hue='region_class', legend=False)
+plt.title('Corruption Index Distribution by Region', fontsize=16)
+plt.xlabel('Region', fontsize=12)
+plt.ylabel('Corruption Index', fontsize=12)
+plt.xticks(rotation=45, ha='right')
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
+```
+
+
+
+```{python}
+# 2. Which political and institutional varaibles contributed most to the change in the corruption index in Central America between 2012 and 2022?
+
+ca_data = combined[combined['sub_region_class'] == 'Central America'].copy()
+display(ca_data.head())
+display(ca_data.tail())
+```
+
+```{python}
+variables_to_analyze = [
+    'v2x_corr', 'v2mecenefm', 'v2exl_legitideol', 'wdi_population',
+    'v2x_polyarchy', 'e_wbgi_gee', 'e_wbgi_vae', 'v2x_cspart'
+]
+
+# Calculate delta
+ca_changes = ca_data.groupby('country').apply(lambda x: pd.Series({
+    f'{col}_change': x[col].iloc[-1] - x[col].iloc[0]
+    for col in variables_to_analyze
+}), include_groups=False)
+
+# Calculate the mean of these changes across all countries in Central America
+avg_ca_changes = ca_changes.mean()
+
+print("Average Changes in Central America (2022 from 2012):")
+print(avg_ca_changes)
+```
+
+```{python}
+# Linear Regression with all variables in combined dataset:
+
+# OLS model with all variables
+m1_formula = 'v2x_corr ~ v2mecenefm + v2exl_legitideol + wdi_population + v2x_polyarchy + e_wbgi_gee + e_wbgi_vae + v2x_cspart'
+model1_all_vars = smf.ols(formula=m1_formula, data=combined).fit()
+
+print(model1_all_vars.summary())
+```
+
+```{python}
+model_coefficients = model1_all_vars.params
+
+# Extract coefficients for independent variables (exclude the intercept
+ind_var_coefficients = model_coefficients.drop('Intercept')
+
+print(ind_var_coefficients)
+```
+
+```{python}
+contributions = {} # dictionary for contributions
+
+# Loop to get each IV's coefficient
+for variable, coefficient in ind_var_coefficients.items():
+    change_var_name = f'{variable}_change'
+    if change_var_name in avg_ca_changes: # check if change variable exists
+        contributions[variable] = avg_ca_changes[change_var_name] * coefficient
+    else:
+        print(f"Unable to find a change for {variable} in avg_ca_changes.")
+
+contributions_series = pd.Series(contributions) # pd transformation
+
+print("Independent Variable contribution to v2x_corr change in Central America:")
+print(contributions_series)
+```
+
+```{python}
+# Initial and final corruption average v2x_corr for C.A.
+min_year_ca = ca_data['year'].min()
+max_year_ca = ca_data['year'].max()
+
+initial_v2x_corr_ca = ca_data[ca_data['year'] == min_year_ca]['v2x_corr'].mean()
+final_v2x_corr_ca = ca_data[ca_data['year'] == max_year_ca]['v2x_corr'].mean()
+
+# Waterfall chart legend
+variable_labels = {
+    'v2mecenefm': 'Mean Electoral Competitiveness Index',
+    'v2exl_legitideol': 'Legitimacy of Electoral Process',
+    'wdi_population': 'Population',
+    'v2x_polyarchy': 'Electoral Democracy Index',
+    'e_wbgi_gee': 'Government Effectiveness Index',
+    'e_wbgi_vae': 'Voice and Accountability Index',
+    'v2x_cspart': 'Civil Society Participation Index'
+}
+
+# Create a DataFrame for waterfall chart data
+waterfall_data = pd.DataFrame({
+    'measure': ['initial'] + list(contributions_series.index) + ['final'],
+    'label': ['Initial Avg v2x_corr'] + [variable_labels.get(var, var) for var in contributions_series.index] + ['Final Avg v2x_corr'],
+    'value': [initial_v2x_corr_ca] + list(contributions_series.values) + [final_v2x_corr_ca]
+})
+
+waterfall_data['type'] = 'relative' # changes
+waterfall_data.loc[waterfall_data['measure'] == 'initial', 'type'] = 'absolute' # start
+waterfall_data.loc[waterfall_data['measure'] == 'final', 'type'] = 'absolute' # end
+
+display(waterfall_data)
+```
+
+```{python}
+fig = go.Figure(go.Waterfall(
+    name = "Change in Corruption",
+    orientation = "v",
+    measure = waterfall_data['type'],
+    x = waterfall_data['label'],
+    textposition = "outside",
+    text = [f'{val:.3f}' for val in waterfall_data['value']],
+    y = waterfall_data['value'],
+    connector = {"line": {"color": "rgb(63, 63, 63)"}}
+))
+
+fig.update_layout(
+    title = "Average Corruption Index Change in Central America (2012-2022) (Waterfall Chart)",
+    showlegend = True,
+    height=600,
+    width=1000,
+    xaxis_title="Variable",
+    yaxis_title="Corruption Index"
+)
+
+fig.show()
+```
+
+```{python}
+# 3. What is the relationship between electoral competitiveness and corruption levels across regions?
+correlation = combined['v2mecenefm'].corr(combined['v2x_corr'], method='pearson')
+print(f"Pearson Correlation between Mean Electoral Competitiveness Index and Corruption Index: {correlation:.4f}")
+```
+
+```{python}
+plt.figure(figsize=(12, 8))
+sns.regplot(data=combined, x='v2mecenefm', y='v2x_corr', scatter_kws={'alpha':0.6}, line_kws={'linestyle':'--', 'color':'red'})
+plt.title('Relationship between Mean Electoral Competitiveness Index and Corruption Index')
+plt.xlabel('Mean Electoral Competitiveness Index')
+plt.ylabel('Corruption Index')
+plt.grid(True, linestyle='--', alpha=0.6)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Even though the previous plot show a clear negative correaltion between electroal competitiveness and corruption, I thought it would be interest to identify the regions where this relationship may be stronger or weaker. To do this, I added a color hue based on the regions defined in the V-Dem dataset. With this, I can see if certain regions deviate from the overall trend or if the relationship holds consistently across different parts of the world.
+
+plt.figure(figsize=(14, 10))
+sns.scatterplot(data=combined, x='v2mecenefm', y='v2x_corr', hue='region_class', alpha=0.6, s=50)
+sns.regplot(data=combined, x='v2mecenefm', y='v2x_corr', scatter=False, color='red', line_kws={'linestyle':'--'})
+plt.title('Relationship between Mean Electoral Competitiveness Index and Corruption Index by Region')
+plt.xlabel('Mean Electoral Competitiveness Index')
+plt.ylabel('Corruption Index')
+plt.grid(True, linestyle='--', alpha=0.6)
+plt.legend(title='Region', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# In the new regression plot, we can see how Europe leans toward high electoral competitiveness and low corruption, and while there are some European countries with higher corruption, the overall trend remains consistent across the region. On the other hand, Africa shows low electoral competitiveness and high corruption, with some exceptions.
+
+# Interestingly enough, the Middle East is a region where some countries experience low electoral competitiveness but also relatively low corruption levels, deviating from the general trend observed in other regions. This suggests that factors other than electoral competitiveness may play a significant role in influencing corruption levels in this region.
+
+# As for America, Asia, and Oceania, they generally follow the overall trend, but there are a few outliers in each region that deviate from the expected relationship between electoral competitiveness and corruption.
+```
+
+```{python}
+# Additional Analysis:
+# America:
+# # TS Plot for Sub-Regions within a Major Region
+# Because a region and sub-region classification has already been created, this could easily be edited to plot any major region and its sub-regions
+use_region = 'America' 
+region_data = combined[combined['region_class'] == use_region].copy()
+
+# Unique sub-regions within this major region for plotting
+sub_regions_to_plot = region_data['sub_region_class'].unique()
+
+time_series_sub = region_data.pivot_table(
+    index='year',
+    columns='sub_region_class',
+    values='v2x_corr', # variable for analysis
+    aggfunc='mean'
+)
+
+plt.figure(figsize=(12, 7))
+
+for sub_region in sub_regions_to_plot:
+    if sub_region in time_series_sub.columns:
+        plt.plot(
+            time_series_sub.index,
+            time_series_sub[sub_region],
+            marker='o',
+            label=sub_region, # sub-region legend
+            linewidth=2,
+            alpha=0.8
+        )
+
+plt.title(f'Corruption Over Time - Sub-Regions within {use_region} (2012-2022)')
+plt.xlabel('Year')
+plt.ylabel('V-Dem Corruption Index (1 = Low Corruption)')
+plt.legend(title=f'{use_region} Sub-Regions', loc='lower left')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Europe
+# Reusing code from previous cell
+use_region = 'Europe' 
+region_data = combined[combined['region_class'] == use_region].copy()
+
+sub_regions_to_plot = region_data['sub_region_class'].unique()
+
+time_series_sub = region_data.pivot_table(
+    index='year',
+    columns='sub_region_class',
+    values='v2x_corr',
+    aggfunc='mean'
+)
+
+plt.figure(figsize=(12, 7))
+
+for sub_region in sub_regions_to_plot:
+    if sub_region in time_series_sub.columns:
+        plt.plot(
+            time_series_sub.index,
+            time_series_sub[sub_region],
+            marker='o',
+            label=sub_region,
+            linewidth=2,
+            alpha=0.8
+        )
+
+plt.title(f'Corruption Over Time - Sub-Regions within {use_region} (2012-2022)')
+plt.xlabel('Year')
+plt.ylabel('V-Dem Corruption Index (1 = Low Corruption)')
+plt.legend(title=f'{use_region} Sub-Regions', loc='lower left')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Moving forward and future work:
+# For expanded work, it would be interesting to make the visualizations interactive and combine them with a dashboard to allow users to explore the data more deeply. Furthermore, the data could show different results based on the user's inputs and because everyone will look at different aspects of the data, this would enhance engagement and understanding.
+```
